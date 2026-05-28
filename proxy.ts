@@ -14,11 +14,13 @@ type ProxyInstance = {
   port: number;
 };
 
-export type Plugin = Promise<{
-  routeTable: RouteTable;
-  serviceRules: ServiceRules;
+export type GatewayPlugin = {
+  routeTable?: RouteTable;
+  serviceRules?: ServiceRules;
   override?: OverrideRules;
-}>;
+};
+
+export type Plugin = Promise<GatewayPlugin> | GatewayPlugin;
 
 export type ServiceRules = Record<
   string,
@@ -42,13 +44,19 @@ export class ProxyManager {
 
   constructor(
     defaultConfig?: Plugin,
-    private certInfo?: CertResult
+    private certInfo?: CertResult,
+    extraPlugins: Plugin[] = [],
+    useBuiltinPlugins = true
   ) {
     this.knownDomains = certInfo?.domains || [];
     this.routeTable = {};
     this.serviceRules = {};
 
-    this.plugins = [defaultConfig, ...plugins].filter(Boolean) as Plugin[];
+    this.plugins = [
+      defaultConfig,
+      ...(useBuiltinPlugins ? plugins : []),
+      ...extraPlugins,
+    ].filter(Boolean) as Plugin[];
     this.loadPlugins();
   }
 
@@ -57,9 +65,9 @@ export class ProxyManager {
     for (const pluginPromise of this.plugins) {
       let plugin;
       try {
-        plugin = await pluginPromise;
-        this.routeTable = { ...this.routeTable, ...plugin.routeTable };
-        this.serviceRules = { ...this.serviceRules, ...plugin.serviceRules };
+        plugin = await Promise.resolve(pluginPromise);
+        this.routeTable = { ...this.routeTable, ...(plugin.routeTable || {}) };
+        this.serviceRules = { ...this.serviceRules, ...(plugin.serviceRules || {}) };
         if (plugin.override) {
           this.overrides.push(plugin.override);
         }
@@ -212,9 +220,9 @@ export class ProxyManager {
   }
 
   private maybeHandleHealth(req: IncomingMessage, res: ServerResponse<IncomingMessage>): boolean {
-    if (req.url !== "/_proxy/health") return false;
+    if (req.url !== "/_proxy/health" && req.url !== "/__health") return false;
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ ok: true, service: "firebase-local-gateway" }));
+    res.end(JSON.stringify({ ok: true, service: "vite-firebase-local-gateway" }));
     return true;
   }
 

@@ -1,4 +1,4 @@
-# Docker usage
+# Docker Usage
 
 The gateway is commonly used as a sidecar service in local development.
 
@@ -7,7 +7,7 @@ The gateway is commonly used as a sidecar service in local development.
 Inside the container:
 
 ```txt
-8080 -> HTTP redirect + healthcheck
+8080 -> HTTP redirect and healthcheck
 4433 -> HTTPS proxy
 ```
 
@@ -19,28 +19,18 @@ ports:
   - "443:4433"
 ```
 
-## OpenSSL
+## Example
 
-The certificate verification code shells out to `openssl`, so Alpine images need it installed:
+See [../examples/docker-compose.basic-auth.yml](../examples/docker-compose.basic-auth.yml).
 
-```yaml
-command:
-  - sh
-  - -c
-  - apk add --no-cache openssl && yarn install && yarn proxy
-```
+The example includes:
 
-Without OpenSSL, existing certificate verification can fail and trigger unnecessary certificate regeneration.
+- gateway service
+- versionable `gateway.config.js` mounted into the container
+- Basic Auth via `environment` (disabled when empty)
 
-## Healthcheck
+The gateway does not require installing `openssl` in the container.
 
-```yaml
-healthcheck:
-  test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:8080/_proxy/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
-  interval: 30s
-  timeout: 5s
-  retries: 3
-  start_period: 30s
-```
+## Health
 
-Compose does not restart unhealthy containers by itself. Use `restart: always` for process exits and an autoheal sidecar if you want unhealthy containers restarted too.
+The gateway exposes `/__health` (and legacy `/_proxy/health`) on the HTTP port if you want to add healthchecks in your own Compose.

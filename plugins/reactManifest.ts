@@ -1,7 +1,7 @@
 import { ClientRequest, IncomingMessage, ServerResponse } from "http";
-import { __dirname, fs, OverrideRules, path } from "../commons";
-import { ProxyTarget, RouteTable } from "../commons";
-import { ServiceRules } from "../proxy";
+import { __dirname, fs, OverrideRules, path } from "../commons.js";
+import { ProxyTarget, RouteTable } from "../commons.js";
+import { ServiceRules } from "../proxy.js";
 
 export const serviceRules: ServiceRules = {};
 export const routeTable: RouteTable = {};

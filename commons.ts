@@ -1,5 +1,5 @@
 import { createCA, createCert } from "mkcert";
-import { execSync } from "child_process";
+import { X509Certificate } from "crypto";
 import path from "path";
 import fs from "fs";
 export { fs, path };
@@ -110,10 +110,13 @@ async function ensureCert(
   let regenerate = true;
   if (fs.existsSync(certPath)) {
     try {
-      const output = execSync(
-        `openssl x509 -in ${certPath} -noout -text`
-      ).toString();
-      const missing = domains.filter((d) => !output.includes(d));
+      const certificate = new X509Certificate(fs.readFileSync(certPath));
+      const subjectAltName = certificate.subjectAltName || "";
+      const missing = domains.filter(
+        (domain) =>
+          !subjectAltName.includes(`DNS:${domain}`) &&
+          !subjectAltName.includes(`IP Address:${domain}`)
+      );
       regenerate = missing.length > 0;
     } catch (e) {
       console.warn(

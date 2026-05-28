@@ -1,5 +1,5 @@
-import { RouteTable } from "../commons";
-import { ServiceRules } from "../proxy";
+import { RouteTable } from "../commons.js";
+import { ServiceRules } from "../proxy.js";
 
 const isDocker = !process.argv.includes("--local");
 

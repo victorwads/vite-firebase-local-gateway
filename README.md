@@ -1,22 +1,12 @@
-# Firebase Local Gateway
+# Vite Firebase Local Gateway
 
-A local HTTPS gateway for Firebase Emulator + Vite projects.
+Local HTTPS gateway and CLI for Vite apps, Firebase Emulator and other local services.
 
-It gives local developers a production-like HTTPS domain while everything stays on the developer machine or inside Docker:
+This tool is for local development only. It is not a production reverse proxy.
 
-```txt
-https://finance.local.wads.dev
-        ↓
-Firebase Local Gateway
-        ↓
-Vite / Firebase Emulator / local services
-```
+## Why It Exists
 
-The project is intentionally pragmatic: it is a programmable local reverse proxy with dynamic certificates, host-based routing, Firebase-specific compatibility hacks, and a plugin system.
-
-## Why this exists
-
-Local Firebase/Vite development often becomes a mess of ports and origins:
+Vite + Firebase Emulator projects often turn into localhost juggling:
 
 ```txt
 localhost:5173  -> Vite
@@ -26,55 +16,203 @@ localhost:9099  -> Auth Emulator
 localhost:5001  -> Functions Emulator
 ```
 
-That breaks or complicates cookies, redirects, auth flows, CORS, OAuth callback URLs, service workers and SDK configuration.
-
-Firebase Local Gateway lets you simulate a more realistic environment:
+That makes cookies, redirects, CORS, OAuth callbacks, service workers and SDK config behave differently from production. This gateway gives each local service a normal HTTPS host while still routing everything to containers or processes on your machine.
 
 ```txt
-https://finance-home.wads.dev
-https://layout-home.wads.dev
-https://firebase-home.wads.dev
+https://app.local.test      -> Vite app
+https://firebase.local.test -> Firebase Emulator UI and APIs
+https://api.local.test      -> local HTTP service
 ```
-
-while still routing everything to local containers/services.
 
 ## Features
 
-- Local trusted HTTPS gateway
-- HTTP → HTTPS redirect
-- Hostname-based routing
-- Firebase Emulator compatibility layer
-- Firebase UI / config interception support
-- Dynamic local certificate regeneration when a new domain appears
-- Plugin system: any file added to `plugins/` is loaded automatically
-- Basic Auth plugin for sensitive local dashboards
+- HTTPS local reverse proxy
+- HTTP to HTTPS redirect
+- Host and path based routing
+- Vite app, Firebase Emulator and generic HTTP app routing
+- Firebase Emulator UI config rewriting
 - WebSocket proxying
+- Dynamic local certificates through `mkcert`
+- Basic Auth as a plugin
+- External config and plugin loading
 - Docker Compose friendly
-- Health endpoint at `/_proxy/health`
+- Health endpoint at `/__health` and legacy `/_proxy/health`
 
-## Quick start
+## Install
 
-Install dependencies:
-
-```bash
-npm install
-```
-
-Start the proxy:
+Run directly:
 
 ```bash
-npm run proxy
+npx vite-firebase-local-gateway
 ```
 
-By default, the gateway starts:
+or:
+
+```bash
+npx vite-firebase-local-gateway start
+```
+
+Install in a project:
+
+```bash
+npm install --save-dev vite-firebase-local-gateway
+```
+
+Then add:
+
+```json
+{
+  "scripts": {
+    "gateway": "vite-firebase-local-gateway start"
+  }
+}
+```
+
+## Quick Start
+
+Create `gateway.config.js`:
+
+```js
+/** @type {import("vite-firebase-local-gateway").GatewayConfig} */
+export default {
+  domains: ["app.local.test", "firebase.local.test", "api.local.test"],
+  routes: [
+    {
+      name: "viteApp",
+      target: "http://localhost:5173",
+      hostStartsWith: "app",
+    },
+    {
+      name: "api",
+      target: "http://localhost:8080",
+      hostStartsWith: "api",
+    },
+  ],
+};
+```
+
+Start the gateway:
+
+```bash
+npx vite-firebase-local-gateway start --local
+```
+
+Defaults:
 
 ```txt
 HTTP redirect: http://localhost:8080
 HTTPS proxy:   https://localhost:4433
-Healthcheck:   http://localhost:8080/_proxy/health
+Healthcheck:   http://localhost:8080/__health
 ```
 
-When running through Docker Compose, map host ports like this:
+When using host ports `80` and `443` in Docker, browse to the domain directly:
+
+```txt
+https://app.local.test
+https://firebase.local.test
+```
+
+## Config
+
+The CLI looks for `gateway.config.js`, `gateway.config.mjs` or `gateway.config.cjs` in the current working directory. You can also pass a path:
+
+```bash
+npx vite-firebase-local-gateway start --config ./config/gateway.config.js
+```
+
+See [gateway.config.example.js](gateway.config.example.js) and [gateway.config.example.ts](gateway.config.example.ts).
+For a Docker-oriented example, see [examples/gateway.config.js](examples/gateway.config.js) and [examples/docker-compose.basic-auth.yml](examples/docker-compose.basic-auth.yml).
+
+The config can map services without editing package internals:
+
+```js
+export default {
+  routes: [
+    { name: "viteApp", target: "http://web:3000", hostStartsWith: "app" },
+    { name: "api", target: "http://api:8080", hostStartsWith: "api" },
+    { name: "admin", target: "http://admin:3000", hostStartsWith: "admin" },
+  ],
+};
+```
+
+The built-in Firebase plugin reads `firebase.json` and maps emulator services. In Docker, it assumes the Firebase service host is `firebase`; with `--local`, it uses `localhost`. You can override that:
+
+```js
+export default {
+  firebaseHost: "firebase",
+};
+```
+
+## Basic Auth
+
+Basic Auth is implemented as a plugin and reads credentials from environment variables:
+
+```env
+PROXY_BASIC_AUTH_USER=local-user
+PROXY_BASIC_AUTH_PASS=replace-with-a-local-secret
+PROXY_BASIC_AUTH_REALM=Firebase Local Gateway
+```
+
+Copy the example:
+
+```bash
+cp .basicAuth.env.example .basicAuth.env
+```
+
+Do not commit `.basicAuth.env`.
+
+In Docker Compose:
+
+```yaml
+services:
+  gateway:
+    environment:
+      PROXY_BASIC_AUTH_USER: "local-user"
+      PROXY_BASIC_AUTH_PASS: "replace-with-a-local-secret"
+```
+
+By default, the plugin protects hosts where `domain.startsWith("firebase")` or `domain.startsWith("assistanthub")`.
+If `PROXY_BASIC_AUTH_USER` or `PROXY_BASIC_AUTH_PASS` are missing or empty, the Basic Auth plugin is disabled (no-op).
+
+## Plugins
+
+Plugins export route rules and optional override hooks:
+
+```js
+export const serviceRules = {
+  reports: (domain) => domain.startsWith("reports"),
+};
+
+export const routeTable = {
+  reports: "http://reports:3000",
+};
+```
+
+Load an external plugin from config:
+
+```js
+export default {
+  plugins: ["./examples/plugins/custom-plugin.js"],
+};
+```
+
+See [docs/PLUGINS.md](docs/PLUGINS.md) and [examples/plugins/custom-plugin.js](examples/plugins/custom-plugin.js).
+
+TypeScript users can import useful types:
+
+```ts
+import type { GatewayConfig, GatewayPlugin, ServiceRules, RouteTable } from "vite-firebase-local-gateway";
+```
+
+The config and plugin APIs are intentionally small in `0.1.0` and may change while the package is still early.
+
+## Docker
+
+See [examples/docker-compose.basic-auth.yml](examples/docker-compose.basic-auth.yml).
+
+The gateway does not require installing `openssl` in the container.
+
+Typical port mapping:
 
 ```yaml
 ports:
@@ -82,130 +220,21 @@ ports:
   - "443:4433"
 ```
 
-Then access your local domains through normal HTTPS:
+The gateway exposes `/__health` (and legacy `/_proxy/health`) if you want to add healthchecks in your own Compose.
 
-```txt
-https://finance-home.wads.dev
-https://firebase-home.wads.dev
-```
-
-## Docker Compose example
-
-See [`examples/docker-compose.basic-auth.yml`](examples/docker-compose.basic-auth.yml).
-
-Minimal service:
+Using a versionable config file in Docker is recommended:
 
 ```yaml
-services:
-  proxy:
-    restart: always
-    image: node:24-alpine
-    working_dir: /app
-    volumes:
-      - proxy_temp:/app/node_modules
-      - proxy_temp:/tmp
-      - proxy_temp:/usr/local/share/.cache
-      - ./firebase.json:/firebase.json:ro
-      - ./Web/proxy:/app
-    ports:
-      - "443:4433"
-      - "80:8080"
-    command:
-      - sh
-      - -c
-      - apk add --no-cache openssl && yarn install && yarn proxy
-    env_file:
-      - ./.basicAuth.env
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:8080/_proxy/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-
 volumes:
-  proxy_temp:
+  - ./gateway.config.js:/workspace/gateway.config.js:ro
+command: npx --yes vite-firebase-local-gateway start --config /workspace/gateway.config.js
 ```
 
-> Note: Docker Compose healthchecks mark a container as unhealthy, but Compose does not automatically restart unhealthy containers. `restart: always` restarts the process if it exits. If you want unhealthy containers to be restarted too, use an autoheal container or equivalent orchestration.
+## Local Certificate Trust
 
-## Basic Auth
+The gateway generates a local CA and certificates under `certs/`. Generated certificates are ignored by git and should not be published.
 
-The included `plugins/basicAuth.ts` protects sensitive hosts using HTTP Basic Auth.
-
-Create `.basicAuth.env`:
-
-```env
-PROXY_BASIC_AUTH_USER=victorwads
-PROXY_BASIC_AUTH_PASS=change-me
-PROXY_BASIC_AUTH_REALM=Firebase Local Gateway
-```
-
-By default, the plugin protects hosts where:
-
-```ts
-domain.startsWith("firebase")
-domain.startsWith("assistanthub")
-```
-
-So these will ask for browser `user:pass` auth:
-
-```txt
-firebase-home.wads.dev
-assistanthub-home.wads.dev
-```
-
-while public/local frontend hosts like these can remain open:
-
-```txt
-finance-home.wads.dev
-layout-home.wads.dev
-```
-
-Test:
-
-```bash
-curl -I https://firebase-home.wads.dev
-curl -u victorwads:change-me -I https://firebase-home.wads.dev
-```
-
-## Routing projects
-
-Routing lives in plugins. Example from `plugins/project.ts`:
-
-```ts
-export const serviceRules = {
-  layout: (host) => host.startsWith("layout"),
-  finance: (host) => host.startsWith("finance"),
-};
-
-export const routeTable = {
-  layout: "http://prototype:8080",
-  finance: "http://web:3000",
-};
-```
-
-Requests are matched by hostname, then forwarded to the configured target.
-
-## Plugins
-
-Any file added to `plugins/` is loaded dynamically by `plugins/index.ts`.
-
-A plugin can export:
-
-```ts
-export const serviceRules = {};
-export const routeTable = {};
-export const override = undefined;
-```
-
-See [`docs/PLUGINS.md`](docs/PLUGINS.md) for examples.
-
-## Local certificate trust
-
-The gateway generates a local CA and certificates under `certs/`.
-
-To trust the generated CA locally:
+Start the gateway once so it creates `certs/rootCA.pem`, then trust the CA.
 
 macOS:
 
@@ -213,52 +242,49 @@ macOS:
 npm run trust:macos
 ```
 
-Linux:
+Debian/Ubuntu and Fedora/RHEL:
 
 ```bash
 npm run trust:linux
 ```
 
-The scripts expect the generated CA at:
+You can also pass a custom CA path:
 
-```txt
-certs/rootCA.pem
+```bash
+bash scripts/trust-cert-macos.sh ./certs/rootCA.pem
+bash scripts/trust-cert-linux.sh ./certs/rootCA.pem
 ```
 
-Start the proxy once before running the trust script so the CA exists.
+Restart browsers that were already open.
 
-## Cloudflare Tunnel usage
+## Troubleshooting
 
-This project can sit behind Cloudflare Tunnel if you want to expose selected local services privately/publicly.
+- `firebase.json not found`: run from a directory that contains `firebase.json`, mount it into the Docker working directory, or pass a config that disables built-in plugins with `useBuiltinPlugins: false`.
+- Browser certificate warning: start the gateway once, run the trust script for your OS, then restart the browser.
+- Basic Auth always rejects: check `PROXY_BASIC_AUTH_USER` and `PROXY_BASIC_AUTH_PASS` in `.basicAuth.env`.
+- Host routes to the wrong service: route matching uses the first matching `serviceRules` entry after plugins are merged; make route names unique.
+- Docker health is unhealthy: verify `http://127.0.0.1:8080/__health` from inside the gateway container.
 
-Example `cloudflared` ingress:
+## Development
 
-```yaml
-ingress:
-  - hostname: finance-home.wads.dev
-    service: https://localhost:443
-    originRequest:
-      noTLSVerify: true
-
-  - hostname: firebase-home.wads.dev
-    service: https://localhost:443
-    originRequest:
-      noTLSVerify: true
-
-  - service: http_status:404
+```bash
+npm install
+npm run typecheck
+npm run build
+npm run proxy -- --local
 ```
 
-Cloudflare handles public TLS. The gateway handles local HTTPS and routing.
+## Publishing
 
-## Development status
+See [docs/publishing.md](docs/publishing.md).
 
-This is an early, developer-focused tool. It is useful today, but still needs productization before being a polished npm package.
+Short version:
 
-Good next steps:
-
-- CLI commands like `init`, `start`, `trust`
-- Better config file support
-- Hot certificate reload with SNI instead of server restart
-- More examples for Firebase Emulator Suite
-- Tests for plugins and routing
-# vite-firebase-local-gateway
+```bash
+npm run typecheck
+npm run build
+npm pack --dry-run
+npm login
+npm version patch
+npm publish
+```

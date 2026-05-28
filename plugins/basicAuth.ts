@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "crypto";
 import { IncomingMessage, ServerResponse } from "http";
-import { OverrideRules } from "../commons";
+import { OverrideRules } from "../commons.js";
 
 export const serviceRules = {};
 export const routeTable = {};
@@ -13,6 +13,10 @@ const protectedHostsRules: Array<(domain: string) => boolean> = [
 ];
 
 export function shouldAskForAuth(domain: string): boolean {
+  const user = (process.env.PROXY_BASIC_AUTH_USER || "").trim();
+  const pass = (process.env.PROXY_BASIC_AUTH_PASS || "").trim();
+  // If credentials are not configured, Basic Auth should be disabled (no-op).
+  if (!user || !pass) return false;
   return protectedHostsRules.some((rule) => rule(domain));
 }
 
@@ -34,15 +38,12 @@ class BasicAuthOverrideRules extends OverrideRules {
     res: ServerResponse<IncomingMessage>
   ): boolean {
     const domain = this.getHostName(req);
-    const user = process.env.PROXY_BASIC_AUTH_USER;
-    const pass = process.env.PROXY_BASIC_AUTH_PASS;
+    const user = (process.env.PROXY_BASIC_AUTH_USER || "").trim();
+    const pass = (process.env.PROXY_BASIC_AUTH_PASS || "").trim();
 
     if (!user || !pass) {
-      console.error(
-        `🔒 Basic Auth blocked ${domain}: PROXY_BASIC_AUTH_USER/PROXY_BASIC_AUTH_PASS are not configured.`
-      );
-      this.deny(res, "Authentication is not configured");
-      return false;
+      // Disabled: allow request through.
+      return true;
     }
 
     const credentials = this.readCredentials(req.headers.authorization);

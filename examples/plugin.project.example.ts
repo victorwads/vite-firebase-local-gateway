@@ -1,5 +1,4 @@
-import { RouteTable } from "../commons";
-import { ServiceRules } from "../proxy";
+import type { RouteTable, ServiceRules } from "vite-firebase-local-gateway";
 
 const isDocker = !process.argv.includes("--local");
 

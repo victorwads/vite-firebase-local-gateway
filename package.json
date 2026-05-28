@@ -1,26 +1,63 @@
 {
-  "name": "firebase-local-gateway",
+  "name": "vite-firebase-local-gateway",
   "version": "0.1.0",
-  "description": "Local HTTPS gateway for Firebase Emulator + Vite projects with dynamic host routing and plugins.",
+  "description": "Local HTTPS gateway and CLI for Vite apps, Firebase Emulator and host-based dev routing.",
   "private": false,
   "type": "module",
   "license": "MIT",
   "author": "Wads",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/victorwads/vite-firebase-local-gateway.git"
+  },
+  "bugs": {
+    "url": "https://github.com/victorwads/vite-firebase-local-gateway/issues"
+  },
+  "homepage": "https://github.com/victorwads/vite-firebase-local-gateway#readme",
   "keywords": [
-    "firebase",
-    "emulator",
     "vite",
+    "firebase",
+    "firebase-emulator",
+    "emulator",
     "https",
+    "https-localhost",
     "local-development",
     "reverse-proxy",
+    "proxy",
+    "cli",
     "devtools"
   ],
-  "main": "index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "vite-firebase-local-gateway": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "examples",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    ".basicAuth.env.example",
+    "gateway.config.example.js",
+    "gateway.config.example.ts"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "proxy": "tsx index.ts",
-    "start": "tsx index.ts",
-    "proxy:debug": "tsx --inspect=0.0.0.0:9230 index.ts",
+    "prebuild": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "tsc",
+    "postbuild": "node -e \"require('fs').chmodSync('dist/cli.js', 0o755)\"",
+    "proxy": "tsx cli.ts",
+    "start": "tsx cli.ts",
+    "proxy:debug": "tsx --inspect=0.0.0.0:9230 cli.ts",
     "typecheck": "tsc --noEmit",
+    "pack:dry-run": "npm --cache /private/tmp/npm-cache pack --dry-run",
+    "prepack": "npm run build",
     "trust:macos": "bash scripts/trust-cert-macos.sh",
     "trust:linux": "bash scripts/trust-cert-linux.sh"
   },

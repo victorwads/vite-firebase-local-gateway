@@ -1,7 +1,7 @@
 import { ClientRequest, IncomingMessage, ServerResponse } from "http";
-import { __dirname, fs, OverrideRules, path } from "../commons";
-import { ProxyTarget, RouteTable } from "../commons";
-import { ServiceRules } from "../proxy";
+import { __dirname, fs, OverrideRules, path } from "../commons.js";
+import { ProxyTarget, RouteTable } from "../commons.js";
+import { ServiceRules } from "../proxy.js";
 
 export const serviceRules: ServiceRules = {
   firestore: (_, pathname) => 
@@ -40,7 +40,14 @@ const FIREBASE_FILENAME = "firebase.json";
 function getRouterFromFirebaseConfig(
   host: string = "firebase"
 ): RouteTable {
-  const firebaseConfig = getFirebaseConfig(FIREBASE_FILENAME);
+  let firebaseConfig: FirebaseConfig;
+  try {
+    firebaseConfig = getFirebaseConfig(FIREBASE_FILENAME);
+  } catch (error) {
+    console.warn((error as Error).message);
+    return {};
+  }
+
   const routeTable: Record<string, ProxyTarget> = {};
 
   const emulators = firebaseConfig.emulators || {};

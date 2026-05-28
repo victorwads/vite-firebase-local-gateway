@@ -1,34 +1,32 @@
-# Plugin system
+# Plugin System
 
-Firebase Local Gateway loads every file inside `plugins/` dynamically.
+Vite Firebase Local Gateway loads built-in plugins from the package and can load external plugins from `gateway.config.js`.
 
-The loader ignores only `index.*`:
-
-```ts
-const files = fs.readdirSync(pluginsDir).filter(f => !f.startsWith('index.'));
-const plugins = await Promise.all(files.map(file => import(path.join(pluginsDir, file))));
-```
-
-That means adding a new file like this is enough:
-
-```txt
-plugins/admin.ts
-plugins/rateLimit.ts
-plugins/myProject.ts
-```
-
-## Basic route plugin
+The public plugin shape is intentionally small:
 
 ```ts
-import { RouteTable } from "../commons";
-import { ServiceRules } from "../proxy";
+import type { GatewayPlugin } from "vite-firebase-local-gateway";
 
-export const serviceRules: ServiceRules = {
+const plugin: GatewayPlugin = {
+  serviceRules: {},
+  routeTable: {},
+  override: undefined,
+};
+
+export default plugin;
+```
+
+You can also export named `serviceRules`, `routeTable` and `override` values.
+
+## Basic Route Plugin
+
+```js
+export const serviceRules = {
   docs: (domain) => domain.startsWith("docs"),
   admin: (domain) => domain.startsWith("admin"),
 };
 
-export const routeTable: RouteTable = {
+export const routeTable = {
   docs: "http://docs:3000",
   admin: "http://admin:3000",
 };
@@ -37,32 +35,44 @@ export const routeTable: RouteTable = {
 With that plugin:
 
 ```txt
-docs-home.wads.dev  -> http://docs:3000
-admin-home.wads.dev -> http://admin:3000
+docs.local.test  -> http://docs:3000
+admin.local.test -> http://admin:3000
 ```
 
-## Path-aware rule
+## Path-Aware Rule
 
 Rules receive `domain` and `pathname`:
 
-```ts
+```js
 export const serviceRules = {
-  firebaseApi: (domain, pathname) =>
-    domain.startsWith("firebase") && pathname.startsWith("/api"),
+  firebaseTools: (domain, pathname) =>
+    domain.startsWith("firebase") && pathname.startsWith("/tools"),
 };
 
 export const routeTable = {
-  firebaseApi: "http://firebase:4000",
+  firebaseTools: "http://firebase:4000",
 };
 ```
 
-## Override plugin
+## Loading a Plugin
 
-Overrides are hooks that can inspect, change, block or respond to requests.
+In `gateway.config.js`:
+
+```js
+export default {
+  plugins: ["./examples/plugins/custom-plugin.js"],
+};
+```
+
+Paths are resolved from the current working directory.
+
+## Override Plugin
+
+Overrides can inspect, change, block or directly respond to requests.
 
 ```ts
 import { ClientRequest, IncomingMessage, ServerResponse } from "http";
-import { OverrideRules } from "../commons";
+import { OverrideRules } from "vite-firebase-local-gateway";
 
 export const serviceRules = {};
 export const routeTable = {};
@@ -93,22 +103,23 @@ class ExampleOverride extends OverrideRules {
 export const override = new ExampleOverride();
 ```
 
-## Basic Auth plugin
+## Basic Auth Plugin
 
-The included `plugins/basicAuth.ts` uses the same override mechanism.
+The included Basic Auth plugin uses the same override mechanism and reads:
 
-To protect another group of hosts, edit:
-
-```ts
-const protectedHostsRules: Array<(domain: string) => boolean> = [
-  (domain) => domain.startsWith("firebase"),
-  (domain) => domain.startsWith("assistanthub"),
-  (domain) => domain.startsWith("admin"),
-];
+```env
+PROXY_BASIC_AUTH_USER=local-user
+PROXY_BASIC_AUTH_PASS=replace-with-a-local-secret
+PROXY_BASIC_AUTH_REALM=Firebase Local Gateway
 ```
 
-The important part is that this follows the same style as routing:
+By default, it protects hosts that match:
 
 ```ts
-domain.startsWith("...")
+domain.startsWith("firebase")
+domain.startsWith("assistanthub")
 ```
+
+If `PROXY_BASIC_AUTH_USER` or `PROXY_BASIC_AUTH_PASS` are missing or empty, the Basic Auth plugin is disabled (no-op).
+
+The `0.1.0` plugin API is usable for external plugins, but it may still evolve while the package is early.

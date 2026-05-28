@@ -1,41 +1,25 @@
 services:
   proxy:
-    restart: always
     image: node:24-alpine
-    working_dir: /app
-    volumes:
-      - proxy_temp:/app/node_modules
-      - proxy_temp:/tmp
-      - proxy_temp:/usr/local/share/.cache
-      - ./firebase.json:/firebase.json:ro
-      - ./Web/proxy:/app
+    working_dir: /workspace
     ports:
-      - "443:4433"
       - "80:8080"
-    command:
-      - sh
-      - -c
-      - apk add --no-cache openssl && yarn install && yarn proxy
-    env_file:
-      - ./.basicAuth.env
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:8080/_proxy/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    labels:
-      - autoheal=true
-
-  # Optional: restart containers that become unhealthy.
-  # Docker Compose by itself marks a container as unhealthy but does not restart it.
-  autoheal:
-    image: willfarrell/autoheal
-    restart: always
-    environment:
-      AUTOHEAL_CONTAINER_LABEL: autoheal
+      - "443:4433"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Persist npm cache so npx installs are fast after the first run
+      - proxy_npm_cache:/root/.npm
+      # Persist generated certs/CA (defaults to ./certs inside the working dir)
+      - ${HOME}/.proxy/certs:/workspace/certs
+      # Versionable config owned by the project (recommended)
+      - ./gateway.config.js:/workspace/gateway.config.js:ro
+      # Optional: required only if you want the built-in Firebase plugin
+      # - ./firebase.json:/workspace/firebase.json:ro
+    environment:
+      # Optional: Basic Auth is enabled only if both are set and non-empty
+      PROXY_BASIC_AUTH_USER: ""
+      PROXY_BASIC_AUTH_PASS: ""
+      PROXY_BASIC_AUTH_REALM: "Firebase Local Gateway"
+    command: npx --yes vite-firebase-local-gateway start --config /workspace/gateway.config.js
 
 volumes:
-  proxy_temp:
+  proxy_npm_cache:
