@@ -1,0 +1,37 @@
+{
+  "name": "firebase-local-gateway",
+  "version": "0.1.0",
+  "description": "Local HTTPS gateway for Firebase Emulator + Vite projects with dynamic host routing and plugins.",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "author": "Wads",
+  "keywords": [
+    "firebase",
+    "emulator",
+    "vite",
+    "https",
+    "local-development",
+    "reverse-proxy",
+    "devtools"
+  ],
+  "main": "index.ts",
+  "scripts": {
+    "proxy": "tsx index.ts",
+    "start": "tsx index.ts",
+    "proxy:debug": "tsx --inspect=0.0.0.0:9230 index.ts",
+    "typecheck": "tsc --noEmit",
+    "trust:macos": "bash scripts/trust-cert-macos.sh",
+    "trust:linux": "bash scripts/trust-cert-linux.sh"
+  },
+  "dependencies": {
+    "http-proxy": "^1.18.1",
+    "mkcert": "^3.2.0"
+  },
+  "devDependencies": {
+    "@types/http-proxy": "^1.17.16",
+    "@types/node": "^24.7.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

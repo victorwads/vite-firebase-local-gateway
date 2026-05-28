@@ -1,0 +1,30 @@
+import { getCerts } from "./commons";
+import { setFirebaseHost } from "./plugins/firebase";
+import { parseArgs } from "./process";
+import { ProxyManager, Plugin, ServiceRules } from "./proxy";
+
+const isDocker = !process.argv.includes("--local");
+const defaultConfig = Promise.resolve({
+  routeTable: {
+    default: `http://192.168.0.0:3000`,
+  },
+  serviceRules: {},
+});
+
+async function start(): Promise<void> {
+  setFirebaseHost(isDocker ? "firebase" : "localhost");
+  const extraDomains = (args.domains || "").split(",");
+  const cert = await getCerts(
+    extraDomains,
+    args.certsDir,
+    args.certPath,
+    args.certKeyPath
+  );
+
+  const manager = new ProxyManager(defaultConfig, cert);
+  await manager.addRedirect(8080, 4433);
+  await manager.addMultiplexedProxy(4433);
+}
+
+const args = parseArgs();
+start();
